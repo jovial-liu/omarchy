@@ -188,7 +188,8 @@ QtObject {
   // cannot be locked out of the shell by taking its button off the bar.
   function inBar(id) {
     var config = shellConfigProvider ? shellConfigProvider() : null
-    return findEntryLocation(config, id).kind === "bar"
+    var kind = findEntryLocation(config, id).kind
+    return kind === "bar" || kind === "tray-drawer"
   }
 
   // A manifest's "center" means beside the clock, so it lands in centerEnd, as
@@ -221,6 +222,28 @@ QtObject {
     return { found: false }
   }
 
+  // Older tray layouts keep widgets inside a drawer entry rather than the
+  // top-level tray section. These are still enabled bar widgets.
+  function findTrayDrawerLocation(config, id) {
+    var key = Util.canonicalWidgetId(String(id))
+    var layout = config.bar.layout
+    var sections = Util.barSections
+    for (var s = 0; s < sections.length; s++) {
+      var entries = layout[sections[s]]
+      if (!Array.isArray(entries)) continue
+      for (var i = 0; i < entries.length; i++) {
+        var drawer = entries[i]
+        if (!Util.isPlainObject(drawer) || !Array.isArray(drawer.widgets)) continue
+        for (var j = 0; j < drawer.widgets.length; j++) {
+          var widget = drawer.widgets[j]
+          if (Util.isPlainObject(widget) && barEntryId(widget.entry) === key)
+            return { found: true, kind: "tray-drawer", section: sections[s], index: i, widgetIndex: j }
+        }
+      }
+    }
+    return { found: false }
+  }
+
   // A caller naming a widget that has been cloned means the clone that took
   // its place, the way resolveEnabledId routes calls to it.
   function findRelativeBarLocation(config, id, section) {
@@ -241,6 +264,8 @@ QtObject {
     if (Util.isPlainObject(config.bar) && Util.isPlainObject(config.bar.layout)) {
       var barLocation = findBarLocation(config, key, "")
       if (barLocation.found) return barLocation
+      var drawerLocation = findTrayDrawerLocation(config, key)
+      if (drawerLocation.found) return drawerLocation
     }
     if (Array.isArray(config.plugins)) {
       for (var j = 0; j < config.plugins.length; j++) {
@@ -482,6 +507,14 @@ QtObject {
           restoredEntry.id = sourceId
           config.bar.layout[cloneLocation.section][cloneLocation.index] = restoredEntry
         }
+      } else if (cloneLocation.kind === "tray-drawer") {
+        // Keep the drawer slot and its pinned/hidden state when restoring a clone.
+        var drawerWidgets = config.bar.layout[cloneLocation.section][cloneLocation.index].widgets
+        var wrapper = drawerWidgets[cloneLocation.widgetIndex]
+        var restored = Util.isPlainObject(wrapper.entry) ? Util.cloneJson(wrapper.entry) : {}
+        restored.id = sourceId
+        wrapper.entry = restored
+        config.plugins = config.plugins.filter(function(entry) { return barEntryId(entry) !== cloneId })
       } else if (cloneLocation.kind === "plugin") {
         config.plugins.splice(cloneLocation.index, 1)
       }
@@ -576,7 +609,11 @@ QtObject {
 
       if (clonedFrom) restoreCloneSource(config, key, clonedFrom)
       else if (location.kind === "bar") config.bar.layout[location.section].splice(location.index, 1)
-      else if (location.kind === "plugin") config.plugins.splice(location.index, 1)
+      else if (location.kind === "tray-drawer") {
+        config.bar.layout[location.section][location.index].widgets.splice(location.widgetIndex, 1)
+        // A stale plugins[] entry must not keep the removed widget enabled.
+        config.plugins = config.plugins.filter(function(entry) { return barEntryId(entry) !== key })
+      } else if (location.kind === "plugin") config.plugins.splice(location.index, 1)
 
       // Dropping the layout entry is the whole story for a widget. Anything
       // else built-in loads by default, so switching it off has to be stated.
