@@ -257,6 +257,45 @@ ShellRoot {
     root.assertEqual(registry.moveBarWidget("third.widget", { section: "right" }), "", "registry moves widgets out of the tray section")
     root.assertDeepEqual(root.config.bar.layout.tray, [], "a widget moved out of the tray section leaves it")
 
+    // Older tray drawers store widgets under right[].widgets[].entry. The
+    // registry must find and disable them before falling back to plugins[].
+    root.config = {
+      version: 1,
+      bar: { layout: {
+        left: [], center: [],
+        right: [{ id: "omarchy.tray", widgets: [
+          { entry: { id: "third.widget", size: 4 }, pinned: true },
+          { entry: { id: "third.right-widget" }, hidden: true }
+        ] }]
+      } },
+      plugins: [{ id: "third.widget" }]
+    }
+    root.assertTrue(registry.inBar("third.widget"), "tray drawer widgets count as bar widgets")
+    root.assertEqual(registry.putBarWidget("third.widget", {}), "", "put accepts a drawer widget without duplicating it")
+    root.assertDeepEqual(root.config.bar.layout.right.length, 1, "put does not add a second bar entry")
+    root.assertTrue(registry.setEnabled("third.widget", false), "disabling a tray drawer widget succeeds")
+    root.assertDeepEqual(root.config.bar.layout.right[0].widgets,
+      [{ entry: { id: "third.right-widget" }, hidden: true }],
+      "disabling removes only the requested drawer widget")
+    root.assertDeepEqual(root.config.plugins, [], "disabling also clears a stale plugins entry")
+    root.assertTrue(!registry.isEnabled("third.widget"), "disabled drawer widget no longer appears enabled")
+
+    root.config = {
+      version: 1,
+      bar: { layout: { left: [], center: [], right: [{ id: "omarchy.tray", widgets: [
+        { entry: { id: "local.first-widget", size: 7 }, pinned: true }
+      ] }] } },
+      plugins: []
+    }
+    root.assertEqual(registry.resolveEnabledId("omarchy.first-widget"), "local.first-widget",
+      "a clone in the drawer handles its source id")
+    root.assertTrue(registry.setEnabled("local.first-widget", false), "disabling a drawer clone succeeds")
+    root.assertDeepEqual(root.config.bar.layout.right[0].widgets,
+      [{ entry: { id: "omarchy.first-widget", size: 7 }, pinned: true }],
+      "disabling a drawer clone restores its source and preserves placement")
+    root.assertEqual(registry.resolveEnabledId("omarchy.first-widget"), "omarchy.first-widget",
+      "disabled drawer clone no longer handles its source id")
+
     root.config = { version: 1, bar: { layout: { left: [], center: [], right: [{ id: "omarchy.tray" }], tray: [{ id: "third.widget" }] } }, plugins: [] }
     root.assertEqual(registry.moveBarWidget("omarchy.tray", { section: "tray" }), "the tray cannot go in its own drawer", "registry keeps the tray out of its own drawer")
     root.assertEqual(registry.moveBarWidget("omarchy.tray", { after: "third.widget" }), "the tray cannot go in its own drawer", "registry keeps the tray out of its own drawer when placed beside a widget in it")
