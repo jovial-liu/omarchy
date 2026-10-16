@@ -8,10 +8,10 @@ rebuild_marker="${OMARCHY_SURFACE_REBUILD_MARKER:-/var/lib/omarchy/migrations/17
 
 [[ -f $surface_conf ]] || exit 0
 
-# Only the file the installer wrote, one or more pinctrl modules included; a
+# Only a file an installer wrote, with or without pinctrl modules; a
 # hand-written one is left as its author meant it.
 installer_modules="surface_aggregator surface_aggregator_registry surface_aggregator_hub surface_hid_core surface_hid surface_kbd intel_lpss_pci 8250_dw"
-installer_pattern="^MODULES(\+?)=\(pinctrl_[[:alnum:]_]+([[:space:]]+pinctrl_[[:alnum:]_]+)* ${installer_modules}\)$"
+installer_pattern="^MODULES(\+?)=\((pinctrl_[[:alnum:]_]+([[:space:]]+pinctrl_[[:alnum:]_]+)*)? ${installer_modules}\)$"
 [[ $(<"$surface_conf") =~ $installer_pattern ]] || exit 0
 
 if [[ -z ${BASH_REMATCH[1]} ]]; then

@@ -93,6 +93,15 @@ run_migration
 grep -Fxq 'limine-mkinitcpio' "$calls" || fail "a file listing several pinctrl modules is rebuilt"
 pass "the migration repairs a file listing several pinctrl modules"
 
+# Omarchy 3 installers wrote the file even when no pinctrl module was found.
+printf 'MODULES=( %s)\n' "$installer_modules" >"$surface_conf"
+rm -f "$marker"
+run_migration
+[[ $(<"$surface_conf") == "MODULES+=( $installer_modules)" ]] ||
+  fail "the migration repairs a file written without a pinctrl module" "$(<"$surface_conf")"
+grep -Fxq 'limine-mkinitcpio' "$calls" || fail "a file written without a pinctrl module is rebuilt"
+pass "the migration repairs a file written without a pinctrl module"
+
 hand_written=(
   'MODULES=(pinctrl_tigerlake surface_kbd)'
   "MODULES=(pinctrl_tigerlake custom_driver $installer_modules)"
